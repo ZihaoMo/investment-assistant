@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}个股管理 - 投资研究助手{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- 页面标题 -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">个股管理</h1>
+            <p class="text-gray-500 mt-1">管理你跟踪的股票和对应的 Playbook</p>
+        </div>
+        <a href="/add-stock" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+            + 添加股票
+        </a>
+    </div>
+
+    {% if stocks %}
+    <!-- 股票列表 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for stock in stocks %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition">
+            <div class="p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">{{ stock.stock_name }}</h3>
+                        <p class="text-sm text-gray-500">{{ stock.ticker or '未设置代码' }}</p>
+                    </div>
+                    <span class="text-2xl">📈</span>
+                </div>
+
+                <!-- 核心论点 -->
+                {% if stock.core_thesis %}
+                <div class="mb-4">
+                    <p class="text-sm font-medium text-gray-500 mb-1">核心论点</p>
+                    <p class="text-gray-900">{{ stock.core_thesis.summary }}</p>
+                </div>
+                {% endif %}
+
+                <!-- 关键要点 -->
+                {% if stock.core_thesis and stock.core_thesis.key_points %}
+                <div class="mb-4">
+                    <p class="text-sm font-medium text-gray-500 mb-2">关键要点</p>
+                    <div class="flex flex-wrap gap-1">
+                        {% for point in stock.core_thesis.key_points[:3] %}
+                        <span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">{{ point[:15] }}{% if point|length > 15 %}...{% endif %}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 最近研究 -->
+                {% if stock.last_research %}
+                <div class="pt-4 border-t border-gray-100">
+                    <p class="text-xs text-gray-500">
+                        最近研究: {{ stock.last_research.date[:10] if stock.last_research.date else '未知' }}
+                        {% if stock.last_research.research_result %}
+                        - {{ stock.last_research.research_result.recommendation or '' }}
+                        {% endif %}
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
+                <a href="/stock/{{ stock.stock_id }}" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                    查看详情 →
+                </a>
+                <button onclick="deleteStock('{{ stock.stock_id }}', '{{ stock.stock_name }}')"
+                    class="text-red-500 hover:text-red-600 text-sm font-medium">
+                    删除
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <!-- 空状态 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+        <div class="text-6xl mb-4">📊</div>
+        <h2 class="text-xl font-semibold text-gray-900 mb-2">尚未添加跟踪股票</h2>
+        <p class="text-gray-500 mb-6">通过苏格拉底式访谈，建立你的投资逻辑</p>
+        <a href="/add-stock" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+            添加第一只股票
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function deleteStock(stockId, stockName) {
+    if (!confirm(`确定要删除 ${stockName} 吗？这将删除该股票的所有 Playbook 和研究历史。`)) {
+        return;
+    }
+
+    const response = await fetch(`/api/stock/${stockId}`, {
+        method: 'DELETE'
+    });
+
+    if (response.ok) {
+        window.location.reload();
+    } else {
+        alert('删除失败');
+    }
+}
+</script>
+{% endblock %}

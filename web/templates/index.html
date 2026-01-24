@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 投资研究助手{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Playbook 概览 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">Playbook</h2>
+            <a href="/portfolio" class="text-blue-600 hover:text-blue-700 text-sm font-medium">编辑 →</a>
+        </div>
+        <div class="p-4">
+            {% if portfolio %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 左侧：主线主题 -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3">主线主题</h3>
+                    {% if portfolio.market_views and portfolio.market_views.main_themes %}
+                    <div class="space-y-2">
+                        {% for theme in portfolio.market_views.main_themes %}
+                        <div class="flex items-center justify-between p-2 rounded-lg
+                            {% if theme.confidence == '高' %}bg-green-50
+                            {% elif theme.confidence == '中' %}bg-yellow-50
+                            {% else %}bg-gray-50{% endif %}">
+                            <span class="font-medium text-gray-900">{{ theme.theme }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full
+                                {% if theme.confidence == '高' %}bg-green-100 text-green-700
+                                {% elif theme.confidence == '中' %}bg-yellow-100 text-yellow-700
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ theme.confidence }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-gray-400 text-sm">暂无</p>
+                    {% endif %}
+                </div>
+
+                <!-- 右侧：主攻标的 -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3">主攻标的</h3>
+                    {% if portfolio.market_views and portfolio.market_views.focus_stocks %}
+                    <div class="space-y-2">
+                        {% for stock in portfolio.market_views.focus_stocks %}
+                        <div class="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
+                            <span class="font-medium text-gray-900">{{ stock.stock }}</span>
+                            <span class="text-xs text-blue-600">{{ stock.theme }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-gray-400 text-sm">暂无</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 交易规则 -->
+            {% if portfolio.portfolio_strategy and portfolio.portfolio_strategy.trading_rules %}
+            <div class="mt-4 pt-4 border-t border-gray-100">
+                <h3 class="text-sm font-medium text-gray-500 mb-2">交易规则</h3>
+                {% if portfolio.portfolio_strategy.trading_rules is mapping %}
+                <div class="space-y-2">
+                    {% if portfolio.portfolio_strategy.trading_rules.stop_loss_strategy %}
+                    <div class="flex items-start space-x-2">
+                        <span class="text-red-500 mt-0.5">*</span>
+                        <div>
+                            <span class="text-xs text-gray-500">止损策略：</span>
+                            <span class="text-sm text-gray-700">{{ portfolio.portfolio_strategy.trading_rules.stop_loss_strategy }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if portfolio.portfolio_strategy.trading_rules.position_philosophy %}
+                    <div class="flex items-start space-x-2">
+                        <span class="text-blue-500 mt-0.5">*</span>
+                        <div>
+                            <span class="text-xs text-gray-500">仓位理念：</span>
+                            <span class="text-sm text-gray-700">{{ portfolio.portfolio_strategy.trading_rules.position_philosophy }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-700">{{ portfolio.portfolio_strategy.trading_rules }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="text-center py-6">
+                <p class="text-gray-500 mb-3">尚未建立 Playbook</p>
+                <a href="/portfolio" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                    建立 Playbook
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 我的偏好 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">我的投资偏好</h2>
+            <a href="/preferences" class="text-blue-600 hover:text-blue-700 text-sm font-medium">管理 →</a>
+        </div>
+        <div class="p-4" x-data="{ prefs: null }" x-init="fetch('/api/preferences').then(r => r.json()).then(d => prefs = d)">
+            <template x-if="prefs">
+                <div class="space-y-3">
+                    <!-- 偏好总结 -->
+                    <template x-if="prefs.preference_summary?.decision_style || prefs.preference_summary?.risk_tolerance">
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div x-show="prefs.preference_summary?.decision_style">
+                                <span class="text-gray-500">决策风格：</span>
+                                <span class="text-gray-900" x-text="prefs.preference_summary?.decision_style"></span>
+                            </div>
+                            <div x-show="prefs.preference_summary?.risk_tolerance">
+                                <span class="text-gray-500">风险偏好：</span>
+                                <span class="text-gray-900" x-text="prefs.preference_summary?.risk_tolerance"></span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- 偏好规则数量 -->
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-gray-500">
+                            已记录 <strong class="text-gray-900" x-text="prefs.preferences?.length || 0"></strong> 条偏好规则
+                        </span>
+                        <span class="text-gray-400" x-show="prefs.preferences?.length > 0">
+                            系统会在研究时参考这些偏好
+                        </span>
+                    </div>
+
+                    <!-- 最近的偏好示例 -->
+                    <template x-if="prefs.preferences?.length > 0">
+                        <div class="p-3 bg-purple-50 rounded-lg text-sm">
+                            <p class="text-purple-800">
+                                <span class="text-purple-600">最新偏好：</span>
+                                当「<span x-text="prefs.preferences[0]?.trigger"></span>」时，
+                                倾向于「<span x-text="prefs.preferences[0]?.my_response"></span>」
+                            </p>
+                        </div>
+                    </template>
+
+                    <!-- 无偏好时的提示 -->
+                    <template x-if="!prefs.preferences || prefs.preferences.length === 0">
+                        <div class="text-center py-4">
+                            <p class="text-gray-500 text-sm">完成研究反馈后，系统会自动学习你的偏好</p>
+                            <a href="/preferences" class="text-blue-600 text-sm hover:underline">或者手动添加偏好 →</a>
+                        </div>
+                    </template>
+                </div>
+            </template>
+            <template x-if="!prefs">
+                <div class="text-center py-4">
+                    <div class="animate-pulse text-gray-400">加载中...</div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- 跟踪股票列表 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900">跟踪股票 <span class="text-gray-400 font-normal">({{ stocks|length }})</span></h2>
+            <div class="flex items-center space-x-3">
+                <a href="/batch-scan" class="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium">
+                    批量扫描
+                </a>
+                <a href="/add-stock" class="text-blue-600 hover:text-blue-700 text-sm font-medium">+ 添加</a>
+            </div>
+        </div>
+        <div class="divide-y divide-gray-100">
+            {% if stocks %}
+                {% for stock in stocks %}
+                <a href="/stock/{{ stock.stock_id }}" class="block p-4 hover:bg-gray-50 transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-3">
+                                <h3 class="font-medium text-gray-900">{{ stock.stock_name }}</h3>
+                                {% if stock.ticker %}
+                                <span class="text-xs text-gray-400">{{ stock.ticker }}</span>
+                                {% endif %}
+                            </div>
+                            {% if stock.core_thesis and stock.core_thesis.summary %}
+                            <p class="text-sm text-gray-500 mt-1">{{ stock.core_thesis.summary }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="flex-shrink-0 ml-4 flex items-center space-x-3">
+                            <!-- 上次研究时间 -->
+                            <span class="text-xs text-gray-400">
+                                {% if stock.last_research and stock.last_research.date %}
+                                上次研究: {{ stock.last_research.date[:10] }}
+                                {% else %}
+                                从未研究
+                                {% endif %}
+                            </span>
+                            {% if stock.last_research and stock.last_research.research_result %}
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if stock.last_research.research_result.recommendation in ['买入', '增持'] %}bg-green-100 text-green-700
+                                {% elif stock.last_research.research_result.recommendation in ['卖出', '减持'] %}bg-red-100 text-red-700
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ stock.last_research.research_result.recommendation }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+            <div class="text-center py-8">
+                <p class="text-gray-500 mb-3">尚未添加跟踪股票</p>
+                <a href="/add-stock" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                    添加股票
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

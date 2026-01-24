@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+
+{% block title %}我的偏好 - 投资研究助手{% endblock %}
+
+{% block content %}
+<div x-data="preferencesPage()" class="space-y-6">
+    <!-- 页面标题 -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">我的投资偏好</h1>
+            <p class="text-gray-500 text-sm mt-1">系统会从你的反馈中学习偏好，并在后续研究中参考</p>
+        </div>
+        <div class="flex space-x-3">
+            <button @click="learnFromInteractions()"
+                :disabled="learning"
+                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium disabled:opacity-50">
+                <span x-show="!learning">从交互中学习偏好</span>
+                <span x-show="learning" class="flex items-center">
+                    <svg class="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    学习中...
+                </span>
+            </button>
+            <button @click="showAddModal = true"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                + 手动添加偏好
+            </button>
+        </div>
+    </div>
+
+    <!-- 偏好总结卡片 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">偏好档案总结</h2>
+            <button @click="editingSummary = !editingSummary" class="text-blue-600 text-sm">
+                <span x-text="editingSummary ? '取消' : '编辑'"></span>
+            </button>
+        </div>
+
+        <!-- 展示模式 -->
+        <div x-show="!editingSummary" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <p class="text-sm font-medium text-gray-500 mb-1">决策风格</p>
+                <p class="text-gray-900" x-text="summary.decision_style || '暂未设置'"></p>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-500 mb-1">风险偏好</p>
+                <p class="text-gray-900" x-text="summary.risk_tolerance || '暂未设置'"></p>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-500 mb-1">研究重点</p>
+                <div class="flex flex-wrap gap-2 mt-1">
+                    <template x-for="(focus, i) in summary.research_focus || []" :key="i">
+                        <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm" x-text="focus"></span>
+                    </template>
+                    <span x-show="!summary.research_focus || summary.research_focus.length === 0" class="text-gray-400">暂未设置</span>
+                </div>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-500 mb-1">不喜欢的模式</p>
+                <div class="flex flex-wrap gap-2 mt-1">
+                    <template x-for="(pattern, i) in summary.disliked_patterns || []" :key="i">
+                        <span class="px-2 py-1 bg-red-100 text-red-700 rounded-full text-sm" x-text="pattern"></span>
+                    </template>
+                    <span x-show="!summary.disliked_patterns || summary.disliked_patterns.length === 0" class="text-gray-400">暂未设置</span>
+                </div>
+            </div>
+            <div class="md:col-span-2">
+                <p class="text-sm font-medium text-gray-500 mb-1">自定义规则</p>
+                <div class="space-y-1">
+                    <template x-for="(rule, i) in summary.custom_rules || []" :key="i">
+                        <p class="text-gray-700 flex items-start">
+                            <span class="text-purple-500 mr-2">*</span>
+                            <span x-text="rule"></span>
+                        </p>
+                    </template>
+                    <span x-show="!summary.custom_rules || summary.custom_rules.length === 0" class="text-gray-400">暂未设置</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 编辑模式 -->
+        <div x-show="editingSummary" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">决策风格</label>
+                <input type="text" x-model="summary.decision_style"
+                    class="w-full p-3 border border-gray-300 rounded-lg"
+                    placeholder="例如：谨慎型，倾向于等待验证信号再行动">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">风险偏好</label>
+                <input type="text" x-model="summary.risk_tolerance"
+                    class="w-full p-3 border border-gray-300 rounded-lg"
+                    placeholder="例如：中等偏低，倾向于分批建仓">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">研究重点（用逗号分隔）</label>
+                <input type="text" x-model="summaryEditResearchFocus"
+                    class="w-full p-3 border border-gray-300 rounded-lg"
+                    placeholder="例如：财务数据, 竞争格局, 管理层">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">不喜欢的模式（用逗号分隔）</label>
+                <input type="text" x-model="summaryEditDislikedPatterns"
+                    class="w-full p-3 border border-gray-300 rounded-lg"
+                    placeholder="例如：过于乐观的分析, 缺少数据支撑">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">自定义规则（每行一条）</label>
+                <textarea x-model="summaryEditCustomRules"
+                    class="w-full p-3 border border-gray-300 rounded-lg"
+                    rows="3"
+                    placeholder="例如：&#10;达到止损点就平仓再看&#10;中等信心的买入建议保持观望"></textarea>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button @click="editingSummary = false" class="px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+                <button @click="saveSummary()" class="px-4 py-2 bg-blue-600 text-white rounded-lg">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 具体偏好列表 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">
+            偏好规则
+            <span class="text-sm font-normal text-gray-500">（当 X 发生时，我倾向于 Y）</span>
+        </h2>
+
+        <div x-show="preferences.length === 0" class="text-center py-8 text-gray-500">
+            <p>暂无偏好规则</p>
+            <p class="text-sm mt-1">完成几次研究反馈后，系统会自动学习你的偏好</p>
+        </div>
+
+        <div class="space-y-3">
+            <template x-for="pref in preferences" :key="pref.id">
+                <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition"
+                     :class="pref.active ? '' : 'opacity-50'">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <span class="px-2 py-0.5 text-xs rounded-full"
+                                      :class="{
+                                          'bg-blue-100 text-blue-700': pref.category === 'decision_style',
+                                          'bg-orange-100 text-orange-700': pref.category === 'risk_tolerance',
+                                          'bg-green-100 text-green-700': pref.category === 'research_focus',
+                                          'bg-gray-100 text-gray-700': true
+                                      }"
+                                      x-text="getCategoryLabel(pref.category)"></span>
+                                <span class="text-xs text-gray-400" x-text="pref.source === 'manual' ? '手动添加' : '自动提取'"></span>
+                                <span class="text-xs text-gray-400" x-text="formatDate(pref.created_at)"></span>
+                            </div>
+                            <p class="text-gray-900">
+                                <span class="text-blue-600 font-medium">当</span>
+                                「<span x-text="pref.trigger"></span>」
+                                <span class="text-blue-600 font-medium">时</span>，
+                                <span class="text-green-600 font-medium">我倾向于</span>
+                                「<span x-text="pref.my_response"></span>」
+                            </p>
+                            <p x-show="pref.reasoning" class="text-sm text-gray-500 mt-1">
+                                推断依据：<span x-text="pref.reasoning"></span>
+                            </p>
+                        </div>
+                        <div class="flex items-center space-x-2 ml-4">
+                            <button @click="togglePreference(pref.id)"
+                                class="p-2 rounded-lg hover:bg-gray-200 transition"
+                                :title="pref.active ? '停用' : '启用'">
+                                <span x-text="pref.active ? '✓' : '○'" :class="pref.active ? 'text-green-600' : 'text-gray-400'"></span>
+                            </button>
+                            <button @click="editPreference(pref)"
+                                class="p-2 rounded-lg hover:bg-gray-200 transition text-gray-500">
+                                编辑
+                            </button>
+                            <button @click="deletePreference(pref.id)"
+                                class="p-2 rounded-lg hover:bg-red-100 transition text-red-500">
+                                删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- 交互历史 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">
+            交互历史
+            <span class="text-sm font-normal text-gray-500">（用于学习偏好的原始数据）</span>
+        </h2>
+
+        <div x-show="interactions.length === 0" class="text-center py-8 text-gray-500">
+            <p>暂无交互记录</p>
+            <p class="text-sm mt-1">完成研究并提交反馈后，交互会自动记录</p>
+        </div>
+
+        <div class="space-y-3 max-h-96 overflow-y-auto">
+            <template x-for="inter in interactions" :key="inter.id">
+                <div class="border-l-4 border-gray-300 pl-4 py-2">
+                    <div class="flex items-center space-x-2 text-sm text-gray-500 mb-1">
+                        <span class="px-2 py-0.5 text-xs rounded-full bg-gray-100" x-text="getInteractionTypeLabel(inter.type)"></span>
+                        <span x-text="inter.stock_name || ''"></span>
+                        <span x-text="formatDate(inter.timestamp)"></span>
+                    </div>
+                    <template x-if="inter.type === 'research_feedback'">
+                        <div class="text-sm">
+                            <p class="text-gray-700">
+                                AI建议 <strong x-text="inter.context?.ai_recommendation || ''"></strong>，
+                                用户决策 <strong x-text="inter.user_feedback?.decision || ''"></strong>
+                            </p>
+                            <p x-show="inter.user_feedback?.feedback_on_research" class="text-gray-500 mt-1">
+                                反馈：<span x-text="inter.user_feedback?.feedback_on_research"></span>
+                            </p>
+                        </div>
+                    </template>
+                    <template x-if="inter.type === 'plan_adjustment'">
+                        <p class="text-sm text-gray-700">调整请求：<span x-text="inter.user_adjustment"></span></p>
+                    </template>
+                    <template x-if="inter.type === 'follow_up_question'">
+                        <p class="text-sm text-gray-700">追问：<span x-text="inter.user_question"></span></p>
+                    </template>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- 添加偏好弹窗 -->
+    <div x-show="showAddModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black opacity-50" @click="showAddModal = false"></div>
+            <div class="relative bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">添加偏好规则</h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">当发生什么情况时...</label>
+                        <input type="text" x-model="newPref.trigger"
+                            class="w-full p-3 border border-gray-300 rounded-lg"
+                            placeholder="例如：AI建议买入但信心为中">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">你倾向于...</label>
+                        <input type="text" x-model="newPref.my_response"
+                            class="w-full p-3 border border-gray-300 rounded-lg"
+                            placeholder="例如：等待更多验证信号再行动">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">类别</label>
+                        <select x-model="newPref.category" class="w-full p-3 border border-gray-300 rounded-lg">
+                            <option value="decision_style">决策风格</option>
+                            <option value="risk_tolerance">风险偏好</option>
+                            <option value="research_focus">研究重点</option>
+                            <option value="communication_style">沟通风格</option>
+                            <option value="general">通用</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button @click="showAddModal = false" class="px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+                    <button @click="addPreference()"
+                        :disabled="!newPref.trigger || !newPref.my_response"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">
+                        添加
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑偏好弹窗 -->
+    <div x-show="showEditModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black opacity-50" @click="showEditModal = false"></div>
+            <div class="relative bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">编辑偏好规则</h3>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">当发生什么情况时...</label>
+                        <input type="text" x-model="editingPref.trigger"
+                            class="w-full p-3 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">你倾向于...</label>
+                        <input type="text" x-model="editingPref.my_response"
+                            class="w-full p-3 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">类别</label>
+                        <select x-model="editingPref.category" class="w-full p-3 border border-gray-300 rounded-lg">
+                            <option value="decision_style">决策风格</option>
+                            <option value="risk_tolerance">风险偏好</option>
+                            <option value="research_focus">研究重点</option>
+                            <option value="communication_style">沟通风格</option>
+                            <option value="general">通用</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button @click="showEditModal = false" class="px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+                    <button @click="saveEditedPreference()" class="px-4 py-2 bg-blue-600 text-white rounded-lg">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function preferencesPage() {
+    return {
+        preferences: {{ preferences.preferences | tojson | safe }},
+        summary: {{ preferences.preference_summary | tojson | safe }},
+        interactions: {{ interactions | tojson | safe }},
+
+        learning: false,
+        editingSummary: false,
+        showAddModal: false,
+        showEditModal: false,
+
+        // 编辑用的临时变量
+        summaryEditResearchFocus: '',
+        summaryEditDislikedPatterns: '',
+        summaryEditCustomRules: '',
+
+        newPref: {
+            trigger: '',
+            my_response: '',
+            category: 'general'
+        },
+
+        editingPref: {},
+
+        init() {
+            // 初始化编辑变量
+            this.summaryEditResearchFocus = (this.summary.research_focus || []).join(', ');
+            this.summaryEditDislikedPatterns = (this.summary.disliked_patterns || []).join(', ');
+            this.summaryEditCustomRules = (this.summary.custom_rules || []).join('\n');
+        },
+
+        getCategoryLabel(category) {
+            const labels = {
+                'decision_style': '决策风格',
+                'risk_tolerance': '风险偏好',
+                'research_focus': '研究重点',
+                'communication_style': '沟通风格',
+                'general': '通用'
+            };
+            return labels[category] || category;
+        },
+
+        getInteractionTypeLabel(type) {
+            const labels = {
+                'research_feedback': '研究反馈',
+                'plan_adjustment': '计划调整',
+                'follow_up_question': '追问',
+                'playbook_edit': 'Playbook编辑'
+            };
+            return labels[type] || type;
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            return dateStr.substring(0, 10);
+        },
+
+        async learnFromInteractions() {
+            this.learning = true;
+            try {
+                const response = await fetch('/api/preferences/learn', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.extracted_preferences && result.extracted_preferences.length > 0) {
+                    alert(`成功提取了 ${result.extracted_preferences.length} 条偏好！`);
+                    window.location.reload();
+                } else {
+                    alert('未能从交互中提取新的偏好，可能需要更多的反馈数据。');
+                }
+            } catch (e) {
+                alert('学习失败: ' + e.message);
+            }
+            this.learning = false;
+        },
+
+        async saveSummary() {
+            // 解析编辑的内容
+            this.summary.research_focus = this.summaryEditResearchFocus
+                .split(',')
+                .map(s => s.trim())
+                .filter(s => s);
+            this.summary.disliked_patterns = this.summaryEditDislikedPatterns
+                .split(',')
+                .map(s => s.trim())
+                .filter(s => s);
+            this.summary.custom_rules = this.summaryEditCustomRules
+                .split('\n')
+                .map(s => s.trim())
+                .filter(s => s);
+
+            await fetch('/api/preferences', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ preference_summary: this.summary })
+            });
+
+            this.editingSummary = false;
+        },
+
+        async addPreference() {
+            const response = await fetch('/api/preferences/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.newPref)
+            });
+            const result = await response.json();
+
+            if (result.success) {
+                this.showAddModal = false;
+                window.location.reload();
+            }
+        },
+
+        editPreference(pref) {
+            this.editingPref = { ...pref };
+            this.showEditModal = true;
+        },
+
+        async saveEditedPreference() {
+            await fetch(`/api/preferences/${this.editingPref.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    trigger: this.editingPref.trigger,
+                    my_response: this.editingPref.my_response,
+                    category: this.editingPref.category
+                })
+            });
+
+            this.showEditModal = false;
+            window.location.reload();
+        },
+
+        async togglePreference(prefId) {
+            await fetch(`/api/preferences/${prefId}/toggle`, { method: 'POST' });
+
+            // 更新本地状态
+            const pref = this.preferences.find(p => p.id === prefId);
+            if (pref) pref.active = !pref.active;
+        },
+
+        async deletePreference(prefId) {
+            if (!confirm('确定要删除这条偏好吗？')) return;
+
+            await fetch(`/api/preferences/${prefId}`, { method: 'DELETE' });
+            this.preferences = this.preferences.filter(p => p.id !== prefId);
+        }
+    }
+}
+</script>
+{% endblock %}

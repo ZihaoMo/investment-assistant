@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}添加股票 - 投资研究助手{% endblock %}
+
+{% block content %}
+<div x-data="socraticInterview()" class="max-w-3xl mx-auto">
+    <!-- 页面标题 -->
+    <div class="text-center mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">添加新股票</h1>
+        <p class="text-gray-500 mt-2">通过苏格拉底式访谈，建立你的投资逻辑</p>
+    </div>
+
+    <!-- 开始界面 -->
+    <div x-show="!started" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+        <div class="text-6xl mb-4">💬</div>
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">开始苏格拉底式访谈</h2>
+        <p class="text-gray-500 mb-6">AI 助手将通过提问引导你明确投资逻辑</p>
+
+        <div class="max-w-md mx-auto mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2 text-left">股票名称</label>
+            <input type="text" x-model="stockName"
+                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="例如：软银、Circle、恒玄科技"
+                @keyup.enter="startInterview()">
+        </div>
+
+        <button @click="startInterview()"
+            :disabled="!stockName.trim()"
+            class="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+            开始访谈
+        </button>
+    </div>
+
+    <!-- 对话界面 -->
+    <div x-show="started" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <!-- 头部 -->
+        <div class="p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <span class="text-2xl">💬</span>
+                    <div>
+                        <h2 class="font-semibold" x-text="'建立 ' + stockName + ' 的 Playbook'"></h2>
+                        <p class="text-blue-100 text-sm">苏格拉底式访谈进行中</p>
+                    </div>
+                </div>
+                <span x-show="completed" class="px-3 py-1 bg-green-500 rounded-full text-sm font-medium">
+                    ✓ 完成
+                </span>
+            </div>
+        </div>
+
+        <!-- 消息区域 -->
+        <div class="h-96 overflow-y-auto p-4 space-y-4" id="chat-messages" x-ref="chatMessages">
+            <template x-for="(msg, index) in messages" :key="index">
+                <div :class="msg.role === 'assistant' ? 'flex justify-start' : 'flex justify-end'">
+                    <div :class="msg.role === 'assistant'
+                        ? 'bg-gray-100 text-gray-900 rounded-2xl rounded-tl-none max-w-[80%]'
+                        : 'bg-blue-600 text-white rounded-2xl rounded-tr-none max-w-[80%]'"
+                        class="px-4 py-3">
+                        <div class="prose prose-sm" :class="msg.role === 'assistant' ? '' : 'text-white'"
+                             x-html="marked.parse(msg.content)"></div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- 加载指示器 -->
+            <div x-show="loading" class="flex justify-start">
+                <div class="bg-gray-100 rounded-2xl rounded-tl-none px-4 py-3">
+                    <div class="flex space-x-2">
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="p-4 border-t border-gray-200">
+            <div x-show="!completed" class="flex space-x-3">
+                <textarea x-model="userInput"
+                    class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    placeholder="输入你的回答...（支持多行，按 Ctrl+Enter 或点击发送）"
+                    rows="3"
+                    @keydown.ctrl.enter="sendMessage()"
+                    @keydown.meta.enter="sendMessage()"
+                    :disabled="loading"></textarea>
+                <button @click="sendMessage()"
+                    :disabled="!userInput.trim() || loading"
+                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 self-end">
+                    发送
+                </button>
+            </div>
+
+            <!-- 完成后的操作 -->
+            <div x-show="completed" class="text-center space-y-4">
+                <p class="text-green-600 font-medium">✓ Playbook 已自动保存</p>
+                <div class="flex justify-center space-x-3">
+                    <a :href="'/stock/' + stockId" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                        查看 Playbook
+                    </a>
+                    <button @click="reset()" class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
+                        添加另一只
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示 -->
+    <div class="mt-6 p-4 bg-blue-50 rounded-lg">
+        <h3 class="font-medium text-blue-900 mb-2">💡 访谈说明</h3>
+        <ul class="text-sm text-blue-800 space-y-1">
+            <li>• AI 会逐步提问，帮你梳理投资逻辑</li>
+            <li>• 问题包括：为什么买、核心论点、验证信号、失效条件等</li>
+            <li>• 回答尽量具体，这将成为未来研究的基础</li>
+            <li>• 支持多行输入，按 <kbd class="px-1.5 py-0.5 bg-white rounded border text-xs">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 bg-white rounded border text-xs">Enter</kbd> 或点击发送按钮提交</li>
+            <li>• 访谈完成后，Playbook 会自动保存</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function socraticInterview() {
+    return {
+        stockName: '',
+        started: false,
+        completed: false,
+        loading: false,
+        messages: [],
+        userInput: '',
+        stockId: '',
+        playbook: null,
+
+        async startInterview() {
+            if (!this.stockName.trim()) return;
+
+            this.started = true;
+            this.loading = true;
+
+            const response = await fetch('/api/interview/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'stock',
+                    stock_name: this.stockName
+                })
+            });
+
+            const data = await response.json();
+            this.messages.push({ role: 'assistant', content: data.message });
+            this.loading = false;
+            this.scrollToBottom();
+        },
+
+        async sendMessage() {
+            if (!this.userInput.trim() || this.loading) return;
+
+            const message = this.userInput;
+            this.userInput = '';
+            this.messages.push({ role: 'user', content: message });
+            this.loading = true;
+            this.scrollToBottom();
+
+            try {
+                const response = await fetch('/api/interview/continue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'stock',
+                        stock_name: this.stockName,
+                        message: message
+                    })
+                });
+
+                const data = await response.json();
+
+                // 处理错误
+                if (data.error) {
+                    this.messages.push({ role: 'assistant', content: `⚠️ ${data.error}\n\n${data.message || ''}` });
+                    this.loading = false;
+                    this.scrollToBottom();
+                    return;
+                }
+
+                this.messages.push({ role: 'assistant', content: data.message });
+
+                // 显示解析警告
+                if (data.parse_warning) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `⚠️ **系统提示**: ${data.parse_warning}`
+                    });
+                }
+
+                // 显示保存错误
+                if (data.save_error) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `❌ **保存失败**: ${data.save_error}`
+                    });
+                }
+
+                if (data.completed && !data.save_error) {
+                    this.completed = true;
+                    this.playbook = data.playbook;
+                    this.stockId = this.stockName.toLowerCase().replace(/ /g, '_');
+                }
+            } catch (error) {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `❌ **网络错误**: 请求失败，请检查网络连接后重试。`
+                });
+            }
+
+            this.loading = false;
+            this.scrollToBottom();
+        },
+
+        scrollToBottom() {
+            this.$nextTick(() => {
+                const container = this.$refs.chatMessages;
+                if (container) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            });
+        },
+
+        reset() {
+            this.stockName = '';
+            this.started = false;
+            this.completed = false;
+            this.messages = [];
+            this.userInput = '';
+            this.stockId = '';
+            this.playbook = null;
+        }
+    }
+}
+</script>
+{% endblock %}

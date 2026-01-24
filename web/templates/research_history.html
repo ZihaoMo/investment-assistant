@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}研究历史 - 投资研究助手{% endblock %}
+
+{% block content %}
+<div x-data="{ showReport: null }" class="space-y-6">
+    <!-- 页面标题 -->
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">研究历史</h1>
+        <p class="text-gray-500 mt-1">所有股票的研究记录，按时间倒序排列</p>
+    </div>
+
+    {% if history %}
+    <!-- 研究记录列表 -->
+    <div class="space-y-4">
+        {% for h in history %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="p-6 cursor-pointer hover:bg-gray-50 transition"
+                 @click="showReport = showReport === {{ loop.index }} ? null : {{ loop.index }}">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <!-- 日期 -->
+                        <div class="text-center">
+                            <p class="text-2xl font-bold text-gray-900">{{ h.date[8:10] if h.date else '--' }}</p>
+                            <p class="text-sm text-gray-500">{{ h.date[5:7] if h.date else '' }}月</p>
+                        </div>
+
+                        <div class="h-12 w-px bg-gray-200"></div>
+
+                        <!-- 股票信息 -->
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <h3 class="font-semibold text-gray-900">{{ h.stock_name }}</h3>
+                                {% if h.research_result %}
+                                <span class="px-2 py-0.5 text-sm rounded-full
+                                    {% if h.research_result.recommendation in ['买入', '增持'] %}bg-green-100 text-green-700
+                                    {% elif h.research_result.recommendation in ['卖出', '减持'] %}bg-red-100 text-red-700
+                                    {% else %}bg-gray-100 text-gray-700{% endif %}">
+                                    {{ h.research_result.recommendation }}
+                                </span>
+                                <span class="px-2 py-0.5 text-sm bg-blue-100 text-blue-700 rounded-full">
+                                    {{ h.research_result.confidence }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            {% if h.research_result and h.research_result.reasoning %}
+                            <p class="text-sm text-gray-600 mt-1">{{ h.research_result.reasoning[:100] }}{% if h.research_result.reasoning|length > 100 %}...{% endif %}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <!-- 影响评估 -->
+                        {% if h.impact_assessment %}
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">论点影响</p>
+                            <p class="font-medium
+                                {% if h.research_result and h.research_result.thesis_impact == '强化' %}text-green-600
+                                {% elif h.research_result and h.research_result.thesis_impact == '削弱' %}text-red-600
+                                {% else %}text-gray-600{% endif %}">
+                                {{ h.research_result.thesis_impact if h.research_result else '—' }}
+                            </p>
+                        </div>
+                        {% endif %}
+
+                        <!-- 展开图标 -->
+                        <svg class="w-5 h-5 text-gray-400 transform transition-transform"
+                             :class="showReport === {{ loop.index }} ? 'rotate-180' : ''"
+                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 展开的报告内容 -->
+            <div x-show="showReport === {{ loop.index }}" x-collapse
+                 class="border-t border-gray-100 p-6 bg-gray-50">
+                <!-- 摘要信息 -->
+                {% if h.research_result %}
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-white p-4 rounded-lg">
+                        <p class="text-sm text-gray-500">建议</p>
+                        <p class="font-semibold text-gray-900">{{ h.research_result.recommendation or '—' }}</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg">
+                        <p class="text-sm text-gray-500">信心</p>
+                        <p class="font-semibold text-gray-900">{{ h.research_result.confidence or '—' }}</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg">
+                        <p class="text-sm text-gray-500">论点影响</p>
+                        <p class="font-semibold text-gray-900">{{ h.research_result.thesis_impact or '—' }}</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg">
+                        <p class="text-sm text-gray-500">仓位建议</p>
+                        <p class="font-semibold text-gray-900">{{ h.research_result.position_suggestion or '—' }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 关键风险与催化剂 -->
+                {% if h.research_result and (h.research_result.key_risks or h.research_result.key_catalysts) %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    {% if h.research_result.key_risks %}
+                    <div class="bg-white p-4 rounded-lg">
+                        <p class="text-sm font-medium text-red-600 mb-2">⚠️ 关键风险</p>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            {% for risk in h.research_result.key_risks %}
+                            <li>• {{ risk }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    {% if h.research_result.key_catalysts %}
+                    <div class="bg-white p-4 rounded-lg">
+                        <p class="text-sm font-medium text-green-600 mb-2">🚀 关键催化剂</p>
+                        <ul class="text-sm text-gray-700 space-y-1">
+                            {% for catalyst in h.research_result.key_catalysts %}
+                            <li>• {{ catalyst }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- 完整报告 -->
+                {% if h.full_report %}
+                <div class="bg-white rounded-lg p-6">
+                    <h4 class="font-medium text-gray-900 mb-4">完整报告</h4>
+                    <div class="prose prose-sm max-w-none text-gray-700"
+                         x-html="marked.parse(`{{ h.full_report|replace('`', '\\`')|replace('\n', '\\n')|replace('\r', '') }}`)"></div>
+                </div>
+                {% endif %}
+
+                <!-- 用户反馈 -->
+                {% if h.user_feedback %}
+                <div class="mt-4 bg-blue-50 p-4 rounded-lg">
+                    <p class="text-sm font-medium text-blue-900 mb-2">📝 我的反馈</p>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <p class="text-gray-500">我的决策</p>
+                            <p class="font-semibold
+                                {% if h.user_feedback.decision in ['买入', '增持'] %}text-green-600
+                                {% elif h.user_feedback.decision in ['卖出', '减持'] %}text-red-600
+                                {% else %}text-gray-900{% endif %}">
+                                {{ h.user_feedback.decision }}
+                            </p>
+                        </div>
+                        {% if h.user_feedback.direction_correct %}
+                        <div class="col-span-2">
+                            <p class="text-gray-500">研究评价</p>
+                            <p class="text-gray-900">{{ h.user_feedback.direction_correct }}</p>
+                        </div>
+                        {% endif %}
+                        {% if h.user_feedback.next_direction %}
+                        <div class="col-span-2">
+                            <p class="text-gray-500">后续研究方向</p>
+                            <p class="text-gray-900">{{ h.user_feedback.next_direction }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if h.user_feedback.tracking_metrics %}
+                    <div class="mt-3">
+                        <p class="text-gray-500 text-sm mb-1">跟踪指标</p>
+                        <div class="flex flex-wrap gap-2">
+                            {% for metric in h.user_feedback.tracking_metrics %}
+                            <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">{{ metric }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- 跟踪事项 -->
+                {% if h.research_result and h.research_result.follow_up_items %}
+                <div class="mt-4 bg-white p-4 rounded-lg">
+                    <p class="text-sm font-medium text-gray-900 mb-2">📋 跟踪事项</p>
+                    <div class="flex flex-wrap gap-2">
+                        {% for item in h.research_result.follow_up_items %}
+                        <span class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 查看股票详情链接 -->
+                <div class="mt-4 text-right">
+                    <a href="/stock/{{ h.stock_id }}" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                        查看 {{ h.stock_name }} 详情 →
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <!-- 空状态 -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+        <div class="text-6xl mb-4">📝</div>
+        <h2 class="text-xl font-semibold text-gray-900 mb-2">暂无研究历史</h2>
+        <p class="text-gray-500 mb-6">开始对你跟踪的股票进行深度研究</p>
+        <a href="/stocks" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+            查看股票列表
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

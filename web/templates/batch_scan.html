@@ -1,0 +1,439 @@
+{% extends "base.html" %}
+
+{% block title %}批量扫描 - 投资研究助手{% endblock %}
+
+{% block content %}
+<div x-data="batchScanPage()" class="space-y-6">
+    <!-- 页面标题 -->
+    <div class="flex items-center justify-between">
+        <div>
+            <a href="/" class="text-blue-600 hover:text-blue-700 text-sm mb-2 inline-block">← 返回首页</a>
+            <h1 class="text-2xl font-bold text-gray-900">批量扫描</h1>
+            <p class="text-gray-500 text-sm mt-1">自动扫描所有股票，发现需要重新研究的标的</p>
+        </div>
+        <div>
+            <button @click="startScan()"
+                :disabled="scanning || stocks.length === 0"
+                class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-show="!scanning">开始扫描 ({{ stocks|length }} 只股票)</span>
+                <span x-show="scanning" class="flex items-center">
+                    <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    扫描中...
+                </span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 扫描进度 -->
+    <div x-show="scanning || scanComplete" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">
+                <span x-show="scanning">扫描进度</span>
+                <span x-show="scanComplete">扫描完成</span>
+            </h2>
+            <span class="text-sm text-gray-500" x-text="`${scannedCount}/${stocks.length}`"></span>
+        </div>
+
+        <!-- 进度条 -->
+        <div class="w-full bg-gray-200 rounded-full h-3 mb-4">
+            <div class="bg-purple-600 h-3 rounded-full transition-all duration-300"
+                 :style="`width: ${(scannedCount / stocks.length) * 100}%`"></div>
+        </div>
+
+        <!-- 扫描状态列表 -->
+        <div class="space-y-2 max-h-64 overflow-y-auto">
+            <template x-for="stock in stocks" :key="stock.stock_id">
+                <div class="flex items-center justify-between py-2 px-3 rounded-lg"
+                     :class="{
+                         'bg-green-50': stock.scanResult && !stock.scanResult.needs_research,
+                         'bg-orange-50': stock.scanResult && stock.scanResult.needs_research,
+                         'bg-blue-50': stock.scanning,
+                         'bg-gray-50': !stock.scanResult && !stock.scanning
+                     }">
+                    <div class="flex items-center space-x-3">
+                        <!-- 状态图标 -->
+                        <span x-show="!stock.scanning && !stock.scanResult" class="text-gray-400">○</span>
+                        <span x-show="stock.scanning" class="text-blue-500">
+                            <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                        </span>
+                        <span x-show="stock.scanResult && stock.scanResult.needs_research" class="text-orange-500 text-lg">!</span>
+                        <span x-show="stock.scanResult && !stock.scanResult.needs_research" class="text-green-500">✓</span>
+
+                        <span class="font-medium text-gray-900" x-text="stock.stock_name"></span>
+                        <span class="text-xs text-gray-400" x-text="`${stock.days_since}天`"></span>
+                    </div>
+                    <div class="text-sm">
+                        <span x-show="stock.scanning" class="text-blue-600">扫描中...</span>
+                        <span x-show="stock.scanResult && stock.scanResult.needs_research" class="text-orange-600">需要研究</span>
+                        <span x-show="stock.scanResult && !stock.scanResult.needs_research" class="text-green-600">无需研究</span>
+                        <span x-show="!stock.scanning && !stock.scanResult" class="text-gray-400">等待中</span>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- 扫描结果 -->
+    <div x-show="scanComplete" class="space-y-6">
+        <!-- 统计摘要 -->
+        <div class="bg-purple-50 border border-purple-200 rounded-xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-purple-800 text-lg font-medium">
+                        扫描了 <strong x-text="stocks.length"></strong> 只股票，
+                        发现 <strong x-text="needResearchStocks.length"></strong> 只可能需要研究
+                    </p>
+                </div>
+                <button x-show="needResearchStocks.length > 0 && selectedCount > 0"
+                    @click="startBatchResearch()"
+                    :disabled="researching"
+                    class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50">
+                    <span x-show="!researching">对选中的 <span x-text="selectedCount"></span> 只股票开始研究</span>
+                    <span x-show="researching" class="flex items-center">
+                        <svg class="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        研究中...
+                    </span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 需要研究的股票 -->
+        <div x-show="needResearchStocks.length > 0">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">需要研究的股票</h3>
+            <div class="space-y-4">
+                <template x-for="stock in needResearchStocks" :key="stock.stock_id">
+                    <div class="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden">
+                        <!-- 头部 -->
+                        <div class="p-4 bg-orange-50 flex items-start justify-between">
+                            <div class="flex items-start space-x-3">
+                                <input type="checkbox"
+                                    x-model="stock.selected"
+                                    class="mt-1 h-5 w-5 text-blue-600 rounded"
+                                    :disabled="stock.researching || stock.researchResult">
+                                <div>
+                                    <h4 class="font-semibold text-gray-900" x-text="stock.stock_name"></h4>
+                                    <p class="text-sm text-gray-500" x-text="stock.core_thesis"></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-500">
+                                    上次研究: <span x-text="stock.last_research?.date?.substring(0, 10) || '从未'"></span>
+                                </p>
+                                <p class="text-sm text-gray-500">
+                                    时间间隔: <strong x-text="stock.days_since + '天'"></strong>
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 扫描结果详情 -->
+                        <div class="p-4 border-t border-orange-100">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div class="text-center p-3 bg-gray-50 rounded-lg">
+                                    <p class="text-2xl font-bold text-gray-900" x-text="stock.scanResult?.news_count || 0"></p>
+                                    <p class="text-xs text-gray-500">新闻数量</p>
+                                </div>
+                                <div class="text-center p-3 bg-red-50 rounded-lg">
+                                    <p class="text-2xl font-bold text-red-600" x-text="stock.scanResult?.high_importance_count || 0"></p>
+                                    <p class="text-xs text-gray-500">高重要性</p>
+                                </div>
+                                <div class="text-center p-3 rounded-lg"
+                                     :class="stock.scanResult?.confidence === '高' ? 'bg-orange-100' : 'bg-yellow-50'">
+                                    <p class="text-lg font-bold"
+                                       :class="stock.scanResult?.confidence === '高' ? 'text-orange-600' : 'text-yellow-600'"
+                                       x-text="stock.scanResult?.confidence || '-'"></p>
+                                    <p class="text-xs text-gray-500">判断信心</p>
+                                </div>
+                            </div>
+
+                            <!-- 判断理由 -->
+                            <div class="p-3 bg-orange-50 rounded-lg mb-4">
+                                <p class="text-sm text-orange-800">
+                                    <strong>判断理由：</strong>
+                                    <span x-text="stock.scanResult?.summary || '需要进行深度研究'"></span>
+                                </p>
+                            </div>
+
+                            <!-- 风险与机会 -->
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div class="p-3 bg-red-50 rounded-lg">
+                                    <p class="text-xs font-medium text-red-600 mb-1">主要风险</p>
+                                    <p class="text-sm text-red-800" x-text="stock.scanResult?.key_risk || '无'"></p>
+                                </div>
+                                <div class="p-3 bg-green-50 rounded-lg">
+                                    <p class="text-xs font-medium text-green-600 mb-1">主要机会</p>
+                                    <p class="text-sm text-green-800" x-text="stock.scanResult?.key_opportunity || '无'"></p>
+                                </div>
+                            </div>
+
+                            <!-- 展开详情 -->
+                            <div>
+                                <button @click="stock.showDetails = !stock.showDetails"
+                                    class="text-blue-600 text-sm hover:underline">
+                                    <span x-text="stock.showDetails ? '收起详情' : '查看详情（新闻列表、研究计划）'"></span>
+                                </button>
+
+                                <div x-show="stock.showDetails" x-collapse class="mt-4 space-y-4">
+                                    <!-- 新闻列表 -->
+                                    <div>
+                                        <h5 class="text-sm font-medium text-gray-700 mb-2">采集到的新闻</h5>
+                                        <div class="max-h-48 overflow-y-auto space-y-2">
+                                            <template x-for="(news, i) in stock.scanResult?.news || []" :key="i">
+                                                <div class="p-2 bg-gray-50 rounded text-sm flex items-start space-x-2">
+                                                    <span class="px-1.5 py-0.5 text-xs rounded"
+                                                          :class="{
+                                                              'bg-red-100 text-red-700': news.importance === '高',
+                                                              'bg-yellow-100 text-yellow-700': news.importance === '中',
+                                                              'bg-gray-100 text-gray-600': news.importance === '低' || !news.importance
+                                                          }"
+                                                          x-text="news.importance || '低'"></span>
+                                                    <div>
+                                                        <p class="text-gray-900" x-text="news.title"></p>
+                                                        <p class="text-xs text-gray-500" x-text="news.date + ' | ' + (news.dimension || '')"></p>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <!-- 研究计划 -->
+                                    <div x-show="stock.scanResult?.assessment?.research_plan">
+                                        <h5 class="text-sm font-medium text-gray-700 mb-2">建议的研究计划</h5>
+                                        <div class="p-3 bg-blue-50 rounded-lg text-sm">
+                                            <p class="text-blue-800 mb-2">
+                                                <strong>研究目标：</strong>
+                                                <span x-text="stock.scanResult?.assessment?.research_plan?.research_objective || ''"></span>
+                                            </p>
+                                            <div x-show="stock.scanResult?.assessment?.research_plan?.research_modules?.length > 0">
+                                                <p class="text-blue-700 font-medium mb-1">研究模块：</p>
+                                                <ul class="list-disc list-inside text-blue-800">
+                                                    <template x-for="m in stock.scanResult?.assessment?.research_plan?.research_modules || []">
+                                                        <li x-text="m.module_name"></li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 研究状态 -->
+                            <div x-show="stock.researching" class="mt-4 p-4 bg-blue-50 rounded-lg">
+                                <div class="flex items-center space-x-3">
+                                    <svg class="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                    <span class="text-blue-700">正在执行深度研究...</span>
+                                </div>
+                            </div>
+
+                            <!-- 研究结果 -->
+                            <div x-show="stock.researchResult" class="mt-4">
+                                <div class="p-4 rounded-lg"
+                                     :class="stock.researchResult?.conclusion?.recommendation === '买入' || stock.researchResult?.conclusion?.recommendation === '增持' ? 'bg-green-50' :
+                                             stock.researchResult?.conclusion?.recommendation === '卖出' || stock.researchResult?.conclusion?.recommendation === '减持' ? 'bg-red-50' : 'bg-blue-50'">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center space-x-4">
+                                            <div>
+                                                <p class="text-xs text-gray-500">AI 建议</p>
+                                                <p class="text-2xl font-bold"
+                                                   :class="stock.researchResult?.conclusion?.recommendation === '买入' || stock.researchResult?.conclusion?.recommendation === '增持' ? 'text-green-700' :
+                                                           stock.researchResult?.conclusion?.recommendation === '卖出' || stock.researchResult?.conclusion?.recommendation === '减持' ? 'text-red-700' : 'text-blue-700'"
+                                                   x-text="stock.researchResult?.conclusion?.recommendation || '-'"></p>
+                                            </div>
+                                            <div>
+                                                <p class="text-xs text-gray-500">信心</p>
+                                                <p class="text-xl font-semibold text-gray-800" x-text="stock.researchResult?.conclusion?.confidence || '-'"></p>
+                                            </div>
+                                        </div>
+                                        <a :href="`/stock/${stock.stock_id}`"
+                                           class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                                            查看完整报告 →
+                                        </a>
+                                    </div>
+                                    <p class="text-gray-700" x-text="stock.researchResult?.conclusion?.reasoning || ''"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- 无需研究的股票 -->
+        <div x-show="noResearchStocks.length > 0">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">暂不需要研究的股票</h3>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+                <template x-for="stock in noResearchStocks" :key="stock.stock_id">
+                    <div class="p-4 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-green-500">✓</span>
+                            <div>
+                                <p class="font-medium text-gray-900" x-text="stock.stock_name"></p>
+                                <p class="text-sm text-gray-500" x-text="`${stock.days_since}天内无重大变化`"></p>
+                            </div>
+                        </div>
+                        <button @click="stock.showDetails = !stock.showDetails"
+                            class="text-blue-600 text-sm hover:underline">
+                            <span x-text="stock.showDetails ? '收起' : '详情'"></span>
+                        </button>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- 初始状态：股票列表 -->
+    <div x-show="!scanning && !scanComplete" class="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="p-4 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-900">待扫描的股票</h2>
+        </div>
+        <div class="divide-y divide-gray-100">
+            {% if stocks %}
+            {% for stock in stocks %}
+            <div class="p-4 flex items-center justify-between">
+                <div>
+                    <p class="font-medium text-gray-900">{{ stock.stock_name }}</p>
+                    <p class="text-sm text-gray-500">{{ stock.core_thesis }}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">
+                        {% if stock.last_research %}
+                        上次研究: {{ stock.last_research.date[:10] }}
+                        {% else %}
+                        从未研究
+                        {% endif %}
+                    </p>
+                    <p class="text-sm font-medium text-purple-600">
+                        将搜索 {{ stock.days_since }} 天内的新闻
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="p-8 text-center text-gray-500">
+                <p>没有股票需要扫描</p>
+                <a href="/add-stock" class="text-blue-600 hover:underline">添加股票 →</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function batchScanPage() {
+    return {
+        stocks: {{ stocks | tojson | safe }},
+        scanning: false,
+        scanComplete: false,
+        scannedCount: 0,
+        researching: false,
+
+        get needResearchStocks() {
+            return this.stocks.filter(s => s.scanResult && s.scanResult.needs_research);
+        },
+
+        get noResearchStocks() {
+            return this.stocks.filter(s => s.scanResult && !s.scanResult.needs_research);
+        },
+
+        get selectedCount() {
+            return this.stocks.filter(s => s.selected && s.scanResult?.needs_research && !s.researchResult).length;
+        },
+
+        async startScan() {
+            this.scanning = true;
+            this.scanComplete = false;
+            this.scannedCount = 0;
+
+            // 初始化所有股票状态
+            for (let stock of this.stocks) {
+                stock.scanning = false;
+                stock.scanResult = null;
+                stock.selected = true;  // 默认选中
+                stock.showDetails = false;
+                stock.researching = false;
+                stock.researchResult = null;
+            }
+
+            // 逐个扫描
+            for (let stock of this.stocks) {
+                stock.scanning = true;
+
+                try {
+                    const response = await fetch(`/api/batch-scan/stock/${stock.stock_id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ days: stock.days_since })
+                    });
+                    const result = await response.json();
+                    stock.scanResult = result;
+                } catch (e) {
+                    stock.scanResult = {
+                        needs_research: false,
+                        summary: '扫描失败: ' + e.message
+                    };
+                }
+
+                stock.scanning = false;
+                this.scannedCount++;
+            }
+
+            this.scanning = false;
+            this.scanComplete = true;
+        },
+
+        async startBatchResearch() {
+            this.researching = true;
+
+            const selectedStocks = this.stocks.filter(s =>
+                s.selected && s.scanResult?.needs_research && !s.researchResult
+            );
+
+            for (let stock of selectedStocks) {
+                stock.researching = true;
+
+                try {
+                    const response = await fetch(`/api/batch-scan/research/${stock.stock_id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            days: stock.days_since,
+                            news: stock.scanResult?.news || [],
+                            research_plan: stock.scanResult?.assessment?.research_plan || {},
+                            assessment: stock.scanResult?.assessment || {}
+                        })
+                    });
+                    const result = await response.json();
+                    stock.researchResult = result;
+                } catch (e) {
+                    stock.researchResult = {
+                        conclusion: {
+                            recommendation: '错误',
+                            confidence: '无',
+                            reasoning: '研究失败: ' + e.message
+                        }
+                    };
+                }
+
+                stock.researching = false;
+                stock.selected = false;  // 研究完成后取消选中
+            }
+
+            this.researching = false;
+        }
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}投资研究助手{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        .prose table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+        .prose th, .prose td { border: 1px solid #e5e7eb; padding: 0.5em; text-align: left; }
+        .prose th { background: #f9fafb; font-weight: 600; }
+        .prose h1, .prose h2, .prose h3 { margin-top: 1.5em; margin-bottom: 0.5em; }
+        .prose ul, .prose ol { margin: 0.5em 0; padding-left: 1.5em; }
+        .prose li { margin: 0.25em 0; }
+        .prose pre { background: #1f2937; color: #e5e7eb; padding: 1em; border-radius: 0.5em; overflow-x: auto; }
+        .prose code { background: #f3f4f6; padding: 0.2em 0.4em; border-radius: 0.25em; font-size: 0.9em; }
+        .prose pre code { background: transparent; padding: 0; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="flex items-center space-x-2">
+                        <span class="text-2xl">📊</span>
+                        <span class="font-bold text-xl text-gray-900">投资研究助手</span>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'index' %}text-blue-600 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                        仪表盘
+                    </a>
+                    <a href="/portfolio" class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'portfolio' %}text-blue-600 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                        总体 Playbook
+                    </a>
+                    <a href="/stocks" class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'stocks' %}text-blue-600 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                        个股管理
+                    </a>
+                    <a href="/research-history" class="px-3 py-2 rounded-md text-sm font-medium {% if request.endpoint == 'research_history' %}text-blue-600 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-50{% endif %}">
+                        研究历史
+                    </a>
+                    <a href="/add-stock" class="ml-4 px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                        + 添加股票
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-gray-200 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 py-4 text-center text-sm text-gray-500">
+            投资研究助手 - 本地版 | 数据存储于 ~/.investment-assistant/
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
