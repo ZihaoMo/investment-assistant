@@ -96,13 +96,18 @@ class OpenAIClient:
     def model_pro(self) -> str:
         return self.model
 
-    def _fetch_google_news_rss(self, query: str, limit: int = 8) -> Tuple[List[Dict[str, str]], Optional[str]]:
+    def _fetch_google_news_rss(self, query: str, time_range_days: int, limit: int = 8) -> Tuple[List[Dict[str, str]], Optional[str]]:
         """Fetch Google News RSS items.
 
         Returns (items, error). Each item: {title, link, pubDate, source}.
         """
         try:
-            q = urllib.parse.quote(query)
+            # enforce freshness using Google News query operator when:N d
+            # (best-effort; Google may ignore in some cases)
+            q_str = query
+            if "when:" not in q_str:
+                q_str = f"{q_str} when:{time_range_days}d"
+            q = urllib.parse.quote(q_str)
             # CN zh RSS is generally better for Chinese names; still includes global sources.
             url = f"https://news.google.com/rss/search?q={q}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
             with urllib.request.urlopen(url, timeout=20) as resp:
@@ -112,10 +117,15 @@ class OpenAIClient:
             if channel is None:
                 return [], None
             items = []
+            from email.utils import parsedate_to_datetime
             for it in channel.findall('item'):
                 title = (it.findtext('title') or '').strip()
                 link = (it.findtext('link') or '').strip()
-                pub = (it.findtext('pubDate') or '').strip()
+                pub_raw = (it.findtext('pubDate') or '').strip()
+                try:
+                    pub = parsedate_to_datetime(pub_raw).strftime('%Y-%m-%d')
+                except Exception:
+                    pub = pub_raw
                 source = (it.findtext('source') or '').strip()
                 if not title:
                     continue
@@ -212,7 +222,7 @@ class OpenAIClient:
         all_news: List[Dict] = []
         failed = []
         for dim, q, focus in dims:
-            items, err = self._fetch_google_news_rss(q, limit=8)
+            items, err = self._fetch_google_news_rss(q, time_range_days=time_range_days, limit=8)
             if err:
                 failed.append({"dimension": dim, "error": err})
                 continue
