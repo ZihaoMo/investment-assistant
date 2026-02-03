@@ -4,7 +4,7 @@ import json
 import re
 from typing import Optional, Dict, List, Tuple
 
-from .gemini_client import GeminiClient
+from .openai_client import OpenAIClient
 from .storage import Storage
 
 
@@ -133,7 +133,7 @@ STOCK_INTERVIEW_PROMPT = """## 角色
 class InterviewManager:
     """苏格拉底访谈管理器"""
 
-    def __init__(self, client: GeminiClient, storage: Storage):
+    def __init__(self, client: OpenAIClient, storage: Storage):
         self.client = client
         self.storage = storage
         self.conversation_history: List[Dict] = []

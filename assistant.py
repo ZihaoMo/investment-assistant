@@ -6,7 +6,7 @@ import sys
 import re
 from typing import Optional, Tuple, Dict, List
 
-from core.gemini_client import GeminiClient
+from core.openai_client import OpenAIClient
 from core.storage import Storage
 from core.interview import InterviewManager
 from core.environment import EnvironmentCollector
@@ -28,9 +28,9 @@ class InvestmentAssistant:
             api_key = self.storage.get_api_key()
 
         try:
-            self.client = GeminiClient(api_key)
+            self.client = OpenAIClient(api_key)
         except Exception as e:
-            self.display.print_error(f"初始化 Gemini 客户端失败: {e}")
+            self.display.print_error(f"初始化 OpenAI 客户端失败: {e}")
             sys.exit(1)
 
         self.interview = InterviewManager(self.client, self.storage)
@@ -43,9 +43,9 @@ class InvestmentAssistant:
 
     def _setup_api_key(self):
         """设置 API Key"""
-        self.display.print_info("首次使用，请设置 Gemini API Key")
-        self.display.print("你可以从 https://aistudio.google.com/apikey 获取 API Key")
-        api_key = self.display.input("请输入 API Key: ")
+        self.display.print_info("首次使用，请设置 OpenAI API Key")
+        self.display.print("请在环境变量 OPENAI_API_KEY 或 ~/.investment-assistant/config.json 的 openai_api_key 中配置")
+        api_key = self.display.input("请输入 OpenAI API Key: ")
         if api_key.strip():
             self.storage.set_api_key(api_key.strip())
             self.display.print_success("API Key 已保存")
@@ -542,7 +542,7 @@ class InvestmentAssistant:
         """执行深度研究"""
         self.display.print("\n正在执行深度研究...\n")
 
-        with self.display.spinner(f"使用 Gemini 进行搜索和分析...") as progress:
+        with self.display.spinner(f"使用 GPT-5.2 进行搜索和分析...") as progress:
             progress.add_task("", total=None)
             result = self.research.execute_research(stock_id, research_plan, environment_data)
 

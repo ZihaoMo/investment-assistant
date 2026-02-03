@@ -5,7 +5,7 @@ import re
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from .gemini_client import GeminiClient
+from .openai_client import OpenAIClient
 from .storage import Storage
 
 
@@ -51,7 +51,7 @@ PREFERENCE_EXTRACTION_PROMPT = """## 角色
 class PreferenceLearner:
     """用户偏好学习器"""
 
-    def __init__(self, client: GeminiClient, storage: Storage):
+    def __init__(self, client: OpenAIClient, storage: Storage):
         self.client = client
         self.storage = storage
 
