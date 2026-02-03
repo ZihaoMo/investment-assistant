@@ -18,6 +18,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import sys
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from core.openai_client import OpenAIClient
 from core.storage import Storage
 from core.environment import EnvironmentCollector
