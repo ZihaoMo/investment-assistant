@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .openai_client import OpenAIClient
 from .storage import Storage
+from .retrieval import SearchManager, format_search_results_for_prompt
 
 
 DEEP_RESEARCH_PROMPT = """## 角色定位
@@ -389,12 +390,34 @@ class ResearchEngine:
         }
 
     def _execute_searches(self, research_plan: Dict, playbook: Optional[Dict]) -> str:
-        """执行研究计划中的搜索（支持新的 research_modules 结构）"""
-        days = 14  # 默认搜索过去14天
+        """执行研究计划中的搜索。
 
-        results = []
+        目标：更适配本环境、产出可核验证据。
+        - 不走浏览器（避免验证码）
+        - 不依赖 OpenClaw 内置 web_search tool（该 tool 在当前环境对 Brave 有异常）
+        - 优先 Tavily，其次 Brave Search HTTP
+        - 输出包含 URL + snippet，便于报告引用
+        - 结果带缓存/预算，降低 SIGKILL 风险
+        """
 
-        # 新结构：从 research_modules 中提取搜索查询
+        # Lazy import to keep startup fast
+        from .retrieval import SearchManager, TavilyProvider, BraveProvider, format_search_results_for_prompt
+
+        sm = SearchManager(
+            providers=[
+                TavilyProvider() if os.getenv("TAVILY_API_KEY") else None,
+                BraveProvider(os.getenv("BRAVE_API_KEY")) if os.getenv("BRAVE_API_KEY") else None,
+            ],
+            cache_ttl_seconds=12 * 3600,
+            hard_timeout_seconds=25,
+        )
+
+        results: List[str] = []
+
+        def run_query(q: str) -> str:
+            hits = sm.search(q, max_results=5, topic="news", depth="basic")
+            return format_search_results_for_prompt(hits, limit=5)
+
         research_modules = research_plan.get("research_modules", [])
         if research_modules:
             for module in research_modules:
@@ -404,39 +427,28 @@ class ResearchEngine:
 
                 results.append(f"\n## 📊 研究模块: {module_name}\n")
 
-                # 执行该模块的搜索查询
-                for query in search_queries[:3]:  # 每个模块最多3个搜索
-                    result = self.client.search(query, days)
-                    results.append(f"### 🔍 搜索: {query}\n{result}\n")
+                for query in (search_queries or [])[:3]:
+                    results.append(f"### 🔍 搜索: {query}\n{run_query(query)}\n")
 
-                # 如果没有搜索查询，用关键问题搜索
                 if not search_queries and key_questions:
                     for q in key_questions[:2]:
-                        result = self.client.search(q, days)
-                        results.append(f"### 🔍 问题: {q}\n{result}\n")
+                        results.append(f"### 🔍 问题: {q}\n{run_query(q)}\n")
 
-        # 兼容旧结构
         if not results:
-            # 尝试从 hypothesis_to_test 中提取验证方法
             hypotheses = research_plan.get("hypothesis_to_test", [])
             for h in hypotheses[:2]:
-                how_to_verify = h.get("how_to_verify", "")
+                how_to_verify = (h.get("how_to_verify", "") or "").strip()
                 if how_to_verify:
-                    result = self.client.search(how_to_verify, days)
-                    results.append(f"### 🔍 验证假设: {h.get('hypothesis', '')}\n{result}\n")
+                    results.append(f"### 🔍 验证假设: {h.get('hypothesis', '')}\n{run_query(how_to_verify)}\n")
 
-        # 最后的兜底：搜索研究目标
         if not results:
-            objective = research_plan.get("research_objective", "")
+            objective = (research_plan.get("research_objective", "") or "").strip()
             if objective:
-                result = self.client.search(objective, days)
-                results.append(f"### 🔍 研究目标: {objective}\n{result}\n")
+                results.append(f"### 🔍 研究目标: {objective}\n{run_query(objective)}\n")
 
-            # 或者用旧结构的 core_questions
             questions = research_plan.get("core_questions", [])
             for q in questions[:3]:
-                result = self.client.search(q, days)
-                results.append(f"### 🔍 {q}\n{result}\n")
+                results.append(f"### 🔍 {q}\n{run_query(q)}\n")
 
         return "\n".join(results) if results else "（未执行搜索）"
 
