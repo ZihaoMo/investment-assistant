@@ -227,55 +227,42 @@ class OpenAIClient:
         failed = []
         warnings: List[str] = []
 
-        use_tavily = bool(os.getenv("TAVILY_API_KEY"))
-        tavily_err: Optional[str] = None
-        if use_tavily:
-            try:
-                from .tavily_search import TavilySearch
+        # Use union search (Tavily + Brave) for better recall.
+        from .retrieval import SearchManager, TavilyProvider, BraveProvider
 
-                tav = TavilySearch()
-                for dim, q, focus in dims:
-                    # News mode, basic depth to control runtime. Upgrade to advanced later if needed.
-                    resp = tav.search(
-                        q,
-                        topic="news",
-                        depth="basic",
-                        max_results=8,
-                        include_answer=False,
-                        include_raw_content=False,
-                    )
-                    results = tav.normalize_results(resp)
-                    # Convert to the same compact schema used by the RSS path
-                    rss_like = [
-                        {
-                            "title": r.title,
-                            "source": "tavily",
-                            "pubDate": r.published_date or "",
-                            "link": r.url,
-                        }
-                        for r in results
-                        if r.title and r.url
-                    ]
-                    structured = self._rss_items_to_structured_news(stock_name, dim, focus, rss_like)
-                    all_news.extend(structured)
+        sm = SearchManager(
+            providers=[
+                TavilyProvider() if os.getenv("TAVILY_API_KEY") else None,
+                BraveProvider(os.getenv("BRAVE_API_KEY")) if os.getenv("BRAVE_API_KEY") else None,
+            ],
+            cache_ttl_seconds=6 * 3600,
+            hard_timeout_seconds=20,
+        )
 
-                warnings.append("新闻来源=Tavily（topic=news）。")
-            except Exception as e:
-                tavily_err = str(e)
-                use_tavily = False
-
-        if not use_tavily:
-            if tavily_err:
-                warnings.append(f"Tavily 不可用，已降级到 Google News RSS。err={tavily_err}")
-            else:
-                warnings.append("未设置 TAVILY_API_KEY，使用 Google News RSS 作为新闻来源。")
-
+        if not sm.providers:
+            warnings.append("未配置 TAVILY_API_KEY / BRAVE_API_KEY，降级到 Google News RSS。")
             for dim, q, focus in dims:
                 items, err = self._fetch_google_news_rss(q, time_range_days=time_range_days, limit=8)
                 if err:
                     failed.append({"dimension": dim, "error": err})
                     continue
                 structured = self._rss_items_to_structured_news(stock_name, dim, focus, items)
+                all_news.extend(structured)
+        else:
+            warnings.append("新闻来源=Tavily + Brave Search（union）。")
+            for dim, q, focus in dims:
+                hits = sm.search(q, max_results=8, topic="news", depth="basic")
+                rss_like = [
+                    {
+                        "title": h.title,
+                        "source": h.provider,
+                        "pubDate": h.published or "",
+                        "link": h.url,
+                    }
+                    for h in hits
+                    if h.title and h.url
+                ]
+                structured = self._rss_items_to_structured_news(stock_name, dim, focus, rss_like)
                 all_news.extend(structured)
 
         # naive de-dup by title prefix

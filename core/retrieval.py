@@ -174,12 +174,25 @@ class SearchManager:
         p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), "utf-8")
 
     def search(self, query: str, *, max_results: int = 5, topic: str = "news", depth: str = "basic") -> List[SearchResult]:
-        """Search using first available provider, with caching.
+        """Search using all available providers and merge results.
 
-        We try providers in order and return the first non-empty result set.
+        Peter requirement: use Tavily + Brave together (union) to improve recall.
+
+        Strategy:
+        - For each provider: try cache; else call provider.
+        - Merge by URL, keep first-seen order (provider order), cap to max_results.
+        - Cache the merged results under a stable key (provider="union").
         """
+
         start = time.time()
-        errors: List[str] = []
+
+        union_key = self._cache_key(query, "union", max_results, topic, depth)
+        cached_union = self._read_cache(union_key)
+        if cached_union is not None:
+            return cached_union
+
+        merged: List[SearchResult] = []
+        seen_urls = set()
 
         for provider in self.providers:
             if (time.time() - start) > self.hard_timeout_seconds:
@@ -189,19 +202,30 @@ class SearchManager:
 
             ck = self._cache_key(query, provider.name, max_results, topic, depth)
             cached = self._read_cache(ck)
+            res: List[SearchResult]
             if cached is not None:
-                return cached
+                res = cached
+            else:
+                try:
+                    res = provider.search(query, max_results=max_results, topic=topic, depth=depth)
+                    if res:
+                        self._write_cache(ck, res)
+                except Exception:
+                    continue
 
-            try:
-                res = provider.search(query, max_results=max_results, topic=topic, depth=depth)
-                if res:
-                    self._write_cache(ck, res)
-                    return res
-            except Exception as e:
-                errors.append(f"{provider.name}:{e}")
+            for r in res:
+                u = (r.url or "").strip()
+                if not u or u in seen_urls:
+                    continue
+                seen_urls.add(u)
+                merged.append(r)
+                if len(merged) >= max_results:
+                    break
+            if len(merged) >= max_results:
+                break
 
-        # nothing found
-        return []
+        self._write_cache(union_key, merged)
+        return merged
 
 
 def format_search_results_for_prompt(results: List[SearchResult], *, limit: int = 8) -> str:
