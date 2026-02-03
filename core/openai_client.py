@@ -204,9 +204,13 @@ class OpenAIClient:
         time_range_days: int = 7,
         playbook: Optional[Dict] = None,
     ) -> List[Dict]:
-        """结构化新闻搜索（无需额外 API key）：Google News RSS + GPT 结构化。
+        """结构化新闻搜索。
 
-        约束：RSS 不保证覆盖面/时效；但能让 CLI 的“有新消息”流程可用。
+        优先级：
+        1) Tavily（若设置 TAVILY_API_KEY）→ 更强覆盖、更适合 LLM 的结果
+        2) Google News RSS（无需额外 key）→ 兜底保证可用性
+
+        返回：List[Dict]，第 0 项为 metadata。
         """
         end_date = datetime.now()
         start_date = end_date - timedelta(days=time_range_days)
@@ -221,13 +225,58 @@ class OpenAIClient:
 
         all_news: List[Dict] = []
         failed = []
-        for dim, q, focus in dims:
-            items, err = self._fetch_google_news_rss(q, time_range_days=time_range_days, limit=8)
-            if err:
-                failed.append({"dimension": dim, "error": err})
-                continue
-            structured = self._rss_items_to_structured_news(stock_name, dim, focus, items)
-            all_news.extend(structured)
+        warnings: List[str] = []
+
+        use_tavily = bool(os.getenv("TAVILY_API_KEY"))
+        tavily_err: Optional[str] = None
+        if use_tavily:
+            try:
+                from .tavily_search import TavilySearch
+
+                tav = TavilySearch()
+                for dim, q, focus in dims:
+                    # News mode, basic depth to control runtime. Upgrade to advanced later if needed.
+                    resp = tav.search(
+                        q,
+                        topic="news",
+                        depth="basic",
+                        max_results=8,
+                        include_answer=False,
+                        include_raw_content=False,
+                    )
+                    results = tav.normalize_results(resp)
+                    # Convert to the same compact schema used by the RSS path
+                    rss_like = [
+                        {
+                            "title": r.title,
+                            "source": "tavily",
+                            "pubDate": r.published_date or "",
+                            "link": r.url,
+                        }
+                        for r in results
+                        if r.title and r.url
+                    ]
+                    structured = self._rss_items_to_structured_news(stock_name, dim, focus, rss_like)
+                    all_news.extend(structured)
+
+                warnings.append("新闻来源=Tavily（topic=news）。")
+            except Exception as e:
+                tavily_err = str(e)
+                use_tavily = False
+
+        if not use_tavily:
+            if tavily_err:
+                warnings.append(f"Tavily 不可用，已降级到 Google News RSS。err={tavily_err}")
+            else:
+                warnings.append("未设置 TAVILY_API_KEY，使用 Google News RSS 作为新闻来源。")
+
+            for dim, q, focus in dims:
+                items, err = self._fetch_google_news_rss(q, time_range_days=time_range_days, limit=8)
+                if err:
+                    failed.append({"dimension": dim, "error": err})
+                    continue
+                structured = self._rss_items_to_structured_news(stock_name, dim, focus, items)
+                all_news.extend(structured)
 
         # naive de-dup by title prefix
         seen = set()
@@ -249,7 +298,7 @@ class OpenAIClient:
             "successful_dimensions": len(dims) - len(failed),
             "failed_dimensions": failed,
             "search_warnings": [
-                "新闻来源=Google News RSS（无需 API key）；覆盖可能不完整，建议关键时刻上传资料复核。",
+                *warnings,
                 f"range={start_date.strftime('%Y-%m-%d')}..{end_date.strftime('%Y-%m-%d')}",
                 f"stock={stock_name}",
             ],
