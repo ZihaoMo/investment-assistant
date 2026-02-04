@@ -100,13 +100,24 @@ class InvestmentAssistant:
 
         # 总体 Playbook
         if any(kw in lower_input for kw in ["投资观点", "总体策略", "总体playbook"]):
-            if "更新" in lower_input:
+            # 直接一次性输入/导入（不走苏格拉底问答）
+            if any(kw in lower_input for kw in ["直接", "批量", "导入", "一次性", "编辑"]):
+                self._direct_edit_portfolio_playbook()
+            elif "更新" in lower_input:
                 self._start_update_portfolio_interview()
             else:
                 self._show_portfolio_playbook()
             return
 
-        # 个股 Playbook - 买入
+        # 个股 Playbook - 直接添加/导入（不走苏格拉底问答）
+        add_match = re.match(r"(?:直接)?(?:添加|新增|导入)\s*(.+)", user_input)
+        if add_match:
+            stock_name = add_match.group(1).strip()
+            if stock_name:
+                self._direct_add_stock_playbook(stock_name)
+            return
+
+        # 个股 Playbook - 买入（苏格拉底访谈）
         buy_match = re.match(r"(?:我想)?买入?\s*(.+)", user_input)
         if buy_match or lower_input.startswith("买"):
             stock_name = buy_match.group(1) if buy_match else user_input[1:].strip()
@@ -138,6 +149,13 @@ class InvestmentAssistant:
             return
 
         # 更新个股逻辑
+        # - 直接/一次性输入："直接更新 XXX 逻辑" / "编辑 XXX playbook"
+        direct_update_match = re.match(r"(?:直接|批量|导入|一次性|编辑)\s*(.+?)(?:的)?\s*(?:逻辑|playbook)", user_input)
+        if direct_update_match:
+            stock_name = direct_update_match.group(1).strip()
+            self._direct_edit_stock_playbook(stock_name)
+            return
+
         update_match = re.match(r"更新\s*(.+?)(?:的)?逻辑", user_input)
         if update_match:
             stock_name = update_match.group(1).strip()
@@ -166,13 +184,16 @@ class InvestmentAssistant:
 [bold]可用命令:[/bold]
 
 [cyan]总体 Playbook[/cyan]
-  我的投资观点      查看总体 Playbook
-  更新投资观点      更新总体 Playbook
+  我的投资观点              查看总体 Playbook
+  更新投资观点              用苏格拉底问答更新总体 Playbook
+  直接更新投资观点          一次性粘贴 JSON 进行修改（不走问答）
 
 [cyan]个股 Playbook[/cyan]
-  买入 XXX         添加新股票（苏格拉底访谈）
-  查看 XXX         查看某股票的 Playbook
-  更新 XXX 逻辑    更新某股票的 Playbook
+  买入 XXX                 添加新股票（苏格拉底访谈）
+  添加 XXX / 导入 XXX       直接添加股票并一次性粘贴 JSON（不走问答）
+  查看 XXX                 查看某股票的 Playbook
+  更新 XXX 逻辑            用苏格拉底问答更新个股 Playbook
+  直接更新 XXX 逻辑        一次性粘贴 JSON 更新个股 Playbook（不走问答）
 
 [cyan]研究流程[/cyan]
   XXX 有新消息     检查 Environment 变化
@@ -187,6 +208,126 @@ class InvestmentAssistant:
   退出             退出程序
 """
         self.display.print(help_text)
+
+    # ==================== 直接编辑（一次性输入）====================
+
+    def _input_multiline(self, title: str) -> str:
+        """Read multi-line input until user enters END on its own line."""
+        self.display.print_info(title)
+        self.display.print("请粘贴 JSON（可包含 ```json 代码块）。输入 END 结束。\n")
+        lines: List[str] = []
+        while True:
+            line = self.display.input("")
+            if line.strip() == "END":
+                break
+            lines.append(line)
+        return "\n".join(lines).strip()
+
+    def _extract_json(self, text: str) -> Optional[Dict]:
+        """Best-effort JSON extraction from raw text or markdown fenced block."""
+        if not text:
+            return None
+
+        # fenced code blocks first
+        matches = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+        for s in reversed(matches):
+            try:
+                obj = json.loads(s)
+                if isinstance(obj, dict):
+                    return obj
+            except Exception:
+                pass
+
+        # brace match
+        m = re.search(r"\{[\s\S]*\}", text)
+        if m:
+            try:
+                obj = json.loads(m.group(0))
+                if isinstance(obj, dict):
+                    return obj
+            except Exception:
+                pass
+
+        # whole text
+        try:
+            obj = json.loads(text)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            return None
+        return None
+
+    def _deep_merge(self, base: Dict, patch: Dict) -> Dict:
+        """Deep-merge dicts. Dict values merge recursively; lists/scalars replace."""
+        out = dict(base or {})
+        for k, v in (patch or {}).items():
+            if isinstance(v, dict) and isinstance(out.get(k), dict):
+                out[k] = self._deep_merge(out[k], v)
+            else:
+                out[k] = v
+        return out
+
+    def _direct_edit_portfolio_playbook(self):
+        current = self.storage.get_portfolio_playbook() or {}
+        if current:
+            self.display.playbook_panel(current, is_portfolio=True)
+
+        raw = self._input_multiline("【直接更新总体 Playbook】")
+        data = self._extract_json(raw)
+        if not data:
+            self.display.print_error("未能解析到 JSON。请粘贴有效 JSON（或 ```json 代码块）。")
+            return
+
+        merged = self._deep_merge(current, data)
+        self.storage.save_portfolio_playbook(merged)
+        self.display.print_success("已保存总体 Playbook（直接更新）")
+
+    def _direct_add_stock_playbook(self, stock_name: str):
+        stock_id = stock_name.lower().replace(" ", "_")
+        current = self.storage.get_stock_playbook(stock_id) or {}
+        if current:
+            self.display.print_warning(f"已存在 {stock_name} 的 Playbook，将进入直接更新。")
+            return self._direct_edit_stock_playbook(stock_name)
+
+        raw = self._input_multiline(f"【直接添加股票：{stock_name}】")
+        data = self._extract_json(raw) or {}
+
+        # allow empty paste -> create skeleton
+        if not data:
+            data = {
+                "stock_name": stock_name,
+                "ticker": "",
+                "core_thesis": {"summary": "", "key_points": [], "market_gap": ""},
+                "validation_signals": [],
+                "invalidation_triggers": [],
+                "operation_plan": {"holding_period": "", "target_price": None, "stop_loss": None, "position_size": ""},
+                "related_entities": [],
+            }
+
+        # enforce name/id
+        data.setdefault("stock_name", stock_name)
+        self.storage.save_stock_playbook(stock_id, data)
+        self.display.print_success(f"已保存 {stock_name} 的 Playbook（直接添加）")
+
+    def _direct_edit_stock_playbook(self, stock_name: str):
+        stock_id = stock_name.lower().replace(" ", "_")
+        current = self.storage.get_stock_playbook(stock_id)
+        if not current:
+            self.display.print_warning(f"未找到 {stock_name} 的 Playbook，将先创建。")
+            return self._direct_add_stock_playbook(stock_name)
+
+        self.display.playbook_panel(current, is_portfolio=False)
+
+        raw = self._input_multiline(f"【直接更新个股 Playbook：{stock_name}】")
+        patch = self._extract_json(raw)
+        if not patch:
+            self.display.print_error("未能解析到 JSON。请粘贴有效 JSON（或 ```json 代码块）。")
+            return
+
+        merged = self._deep_merge(current, patch)
+        merged.setdefault("stock_name", current.get("stock_name") or stock_name)
+        self.storage.save_stock_playbook(stock_id, merged)
+        self.display.print_success(f"已保存 {stock_name} 的 Playbook（直接更新）")
 
     # ==================== 总体 Playbook ====================
 
