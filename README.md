@@ -695,9 +695,11 @@ Environment┘               ▼
 ### 环境要求
 
 - Python 3.9+
-- Gemini API Key（需要支持 Google Search）
+- OpenAI API Key（必需）
+- （可选）Tavily API Key：增强新闻/网页检索召回
+- （可选）OpenClaw Gateway：通过 OpenClaw 的 `web_search` 工具（Brave）做联网搜索（本仓库**不**直连 Brave HTTP API）
 
-### 安装步骤
+### 安装步骤（CLI 版）
 
 ```bash
 # 1. 进入项目目录
@@ -706,74 +708,72 @@ cd investment-assistant
 # 2. 安装依赖
 pip install -r requirements.txt
 
-# 3. 配置 API Key（二选一）
-# 方式一：环境变量
-export GEMINI_API_KEY="your_api_key"
+# 3. 配置 OpenAI Key（二选一）
+export OPENAI_API_KEY="your_api_key"
+# 或首次启动时按提示写入 ~/.investment-assistant/config.json
 
-# 方式二：首次启动时在界面中输入
+# 4. （可选）配置 Tavily
+export TAVILY_API_KEY="your_tavily_key"
 
-# 4. 启动 Web 服务
-python web/app.py
-
-# 5. 访问
-open http://localhost:5000
+# 5. 运行
+python assistant.py
 ```
 
-### 依赖列表
+### OpenClaw Gateway（可选，但推荐）
 
-```
-google-genai>=0.4.0
-flask>=2.0.0
-```
+本项目的联网检索有两条路径：
+1) Tavily（有 `TAVILY_API_KEY` 时优先）
+2) OpenClaw `web_search`（Brave，由 OpenClaw 统一管控）
 
-### 可选配置
+如果你在 OpenClaw 环境里跑（比如你现在这台），默认会从 `~/.openclaw/openclaw.json` 读取 gateway token。
+也可以用环境变量覆盖：
 
 ```bash
-# 启用密码保护
-curl -X POST http://localhost:5000/api/auth/setup \
-  -H "Content-Type: application/json" \
-  -d '{"password": "your_password", "enable": true}'
+export OPENCLAW_GATEWAY_URL="ws://127.0.0.1:18789"
+export OPENCLAW_GATEWAY_TOKEN="<your_token>"
 ```
 
 ---
 
 ## CLI 命令行使用
 
-除了 Web 界面，也支持命令行操作：
-
 ```bash
 python assistant.py
 ```
 
-### 常用命令
+### 常用命令（含“直接导入/一次性编辑”能力）
 
 ```
-> 我的投资观点     # 查看总体 Playbook
-> 更新投资观点     # 更新总体 Playbook
-> 买入软银         # 添加新股票（苏格拉底访谈）
-> 查看软银         # 查看 Playbook
-> 更新软银逻辑     # 更新 Playbook
-> 软银有新消息     # 检查 Environment 变化
-> 查看软银历史     # 查看研究历史
-> 列出持仓         # 显示所有股票
-> 删除软银         # 删除某股票
-> 帮助            # 显示帮助
-> 退出            # 退出程序
+> 我的投资观点              # 查看总体 Playbook
+> 更新投资观点              # 苏格拉底问答更新总体 Playbook
+> 直接更新投资观点          # 一次性粘贴 JSON 更新（不走问答）
+
+> 买入 软银                 # 添加新股票（苏格拉底访谈）
+> 添加 软银 / 导入 软银      # 直接添加并一次性粘贴 JSON（不走问答）
+> 查看 软银                 # 查看个股 Playbook
+> 更新 软银 逻辑            # 问答更新
+> 直接更新 软银 逻辑        # 一次性粘贴 JSON 更新
+
+> 软银有新消息              # 检查 Environment 变化
+> 查看 软银 历史            # 查看研究历史
+
+> 列出持仓                  # 显示所有股票
+> 删除 软银                 # 删除某股票
+
+> 帮助
+> 退出
 ```
 
 ---
 
 ## 常见问题
 
-### Q: 搜索功能不可用怎么办？
+### Q: 搜索功能不可用/不稳定怎么办？
 
-A: 系统会显示黄色警告，提示哪些搜索维度失败。你可以：
-1. 检查 API Key 是否支持 Google Search
-2. 手动上传相关资料作为补充
-
-### Q: 如何导出研究报告？
-
-A: 目前支持在页面中查看完整报告（Markdown 格式）。你可以复制内容到其他工具进行排版。
+A: 现在检索支持“多提供方兜底”（Tavily + OpenClaw web_search）。你可以：
+1. 配置 `TAVILY_API_KEY`（通常最稳定）
+2. 确认 OpenClaw Gateway 可用（并已配置 token）
+3. 如果两者都不可用，系统会降级：仍可通过“上传资料/历史资料”完成研究，只是自动抓取的新闻变少
 
 ### Q: 数据保存在哪里？
 
