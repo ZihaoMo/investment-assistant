@@ -5,7 +5,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
-from .gemini_client import GeminiClient
+from .openai_client import OpenAIClient
 from .storage import Storage
 
 
@@ -148,7 +148,7 @@ IMPACT_ASSESSMENT_PROMPT = """## 角色
 class EnvironmentCollector:
     """Environment 采集器"""
 
-    def __init__(self, client: GeminiClient, storage: Storage):
+    def __init__(self, client: OpenAIClient, storage: Storage):
         self.client = client
         self.storage = storage
 
@@ -174,14 +174,35 @@ class EnvironmentCollector:
             playbook=playbook  # 传入 Playbook 以增强搜索
         )
 
+        # 兼容降级/异常情况：返回可能不是 List[Dict]
+        if isinstance(raw_result, str):
+            raw_result = [{
+                "_is_metadata": True,
+                "total_dimensions": 0,
+                "successful_dimensions": 0,
+                "failed_dimensions": [],
+                "search_warnings": [
+                    "search_news_structured 返回了字符串（可能未接入联网搜索），已降级为空新闻列表。",
+                    raw_result[:200],
+                ],
+            }]
+        elif raw_result is None:
+            raw_result = [{
+                "_is_metadata": True,
+                "total_dimensions": 0,
+                "successful_dimensions": 0,
+                "failed_dimensions": [],
+                "search_warnings": ["search_news_structured 返回空值，已降级为空新闻列表。"],
+            }]
+
         # 提取元数据（第一个元素如果是 metadata）
         search_metadata = None
         news_list = []
 
         for item in raw_result:
-            if item.get("_is_metadata"):
+            if isinstance(item, dict) and item.get("_is_metadata"):
                 search_metadata = item
-            else:
+            elif isinstance(item, dict):
                 news_list.append(item)
 
         # 如果没有提取到元数据，创建一个默认的
@@ -193,10 +214,11 @@ class EnvironmentCollector:
                 "search_warnings": []
             }
 
-        return {
-            "news": news_list,
-            "search_metadata": search_metadata
-        }
+        # 兼容 CLI：返回 List[Dict]，并把 metadata 作为第一个元素
+        result = list(news_list)
+        if search_metadata:
+            result.insert(0, search_metadata)
+        return result
 
     def _parse_news_response(self, response: str) -> List[Dict]:
         """解析新闻响应"""

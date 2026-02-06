@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 import hashlib
 
-from core.gemini_client import GeminiClient
+from core.openai_client import OpenAIClient
 from core.storage import Storage
 from core.interview import InterviewManager
 from core.environment import EnvironmentCollector
@@ -82,7 +82,7 @@ def get_client():
     if client is None:
         api_key = storage.get_api_key()
         if api_key:
-            client = GeminiClient(api_key)
+            client = OpenAIClient(api_key)
             interview_manager = InterviewManager(client, storage)
             env_collector = EnvironmentCollector(client, storage)
             research_engine = ResearchEngine(client, storage)

@@ -38,14 +38,14 @@ class Storage:
             json.dump(config, f, ensure_ascii=False, indent=2)
 
     def get_api_key(self) -> Optional[str]:
-        """获取 API Key"""
+        """获取 API Key（OpenAI 优先）"""
         config = self.get_config()
-        return config.get("gemini_api_key") or os.getenv("GEMINI_API_KEY")
+        return config.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
 
     def set_api_key(self, api_key: str):
-        """设置 API Key"""
+        """设置 API Key（写入 openai_api_key）"""
         config = self.get_config()
-        config["gemini_api_key"] = api_key
+        config["openai_api_key"] = api_key
         self.save_config(config)
 
     # ==================== 总体 Playbook ====================
