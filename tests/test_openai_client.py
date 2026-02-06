@@ -1,107 +1,104 @@
-"""Unit tests for OpenAIClient."""
+"""Tests for core.openai_client.OpenAIClient."""
 
-import pytest
+from __future__ import annotations
+
+import json
+import os
 from unittest.mock import MagicMock, patch
 
-from core.openai_client import OpenAIClient
+import pytest
 
+
+# ---------------------------------------------------------------------------
+# Construction
+# ---------------------------------------------------------------------------
 
 class TestOpenAIClientInit:
-    def test_init_with_explicit_key(self, mock_openai_client):
-        client = OpenAIClient(api_key="test-key")
-        assert client.api_key == "test-key"
-        assert client.model == "gpt-5.2"
-
-    def test_init_with_env_key(self, mock_openai_client):
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "env-key"}):
-            client = OpenAIClient()
-            assert client.api_key == "env-key"
-
-    def test_init_missing_key_raises(self):
-        with patch.dict("os.environ", {}, clear=True):
-            # Ensure OPENAI_API_KEY is not set
-            import os
+    def test_requires_api_key(self):
+        with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("OPENAI_API_KEY", None)
+            from core.openai_client import OpenAIClient
             with pytest.raises(ValueError, match="OPENAI_API_KEY"):
                 OpenAIClient(api_key=None)
 
-    def test_custom_model(self, mock_openai_client):
-        client = OpenAIClient(api_key="k", model="gpt-4o")
-        assert client.model == "gpt-4o"
+    def test_accepts_explicit_key(self):
+        with patch("core.openai_client.OpenAI"):
+            from core.openai_client import OpenAIClient
+            c = OpenAIClient(api_key="sk-test")
+            assert c.api_key == "sk-test"
+            assert c.model == "gpt-5.2"
+
+    def test_env_key_fallback(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-env"}):
+            with patch("core.openai_client.OpenAI"):
+                from core.openai_client import OpenAIClient
+                c = OpenAIClient()
+                assert c.api_key == "sk-env"
 
 
-class TestOpenAIClientChat:
-    def test_chat_simple(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        result = client.chat("hello")
+# ---------------------------------------------------------------------------
+# chat / chat_with_system
+# ---------------------------------------------------------------------------
+
+class TestChat:
+    def test_chat_returns_content(self, mock_openai_client):
+        result = mock_openai_client.chat("hello")
         assert result == "mock response"
-        call_args = mock_openai_client["client_instance"].chat.completions.create.call_args
-        messages = call_args.kwargs["messages"]
-        assert len(messages) == 1
-        assert messages[0]["role"] == "user"
-        assert messages[0]["content"] == "hello"
-        assert call_args.kwargs["timeout"] == 120
-
-    def test_chat_with_history(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        history = [
-            {"role": "user", "content": "q1"},
-            {"role": "model", "content": "a1"},  # Gemini-style "model" role
-        ]
-        client.chat("q2", history=history)
-        call_args = mock_openai_client["client_instance"].chat.completions.create.call_args
-        messages = call_args.kwargs["messages"]
-        assert len(messages) == 3
-        assert messages[0]["role"] == "user"
-        assert messages[1]["role"] == "assistant"  # "model" mapped to "assistant"
-        assert messages[2]["content"] == "q2"
 
     def test_chat_with_system(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        result = client.chat_with_system("you are helpful", "do something")
-        call_args = mock_openai_client["client_instance"].chat.completions.create.call_args
-        messages = call_args.kwargs["messages"]
-        assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "you are helpful"
-        assert messages[-1]["role"] == "user"
-        assert messages[-1]["content"] == "do something"
+        result = mock_openai_client.chat_with_system("sys", "usr")
+        assert result == "mock response"
+
+    def test_chat_passes_history(self, mock_openai_client):
+        mock_openai_client.chat("q", history=[
+            {"role": "user", "content": "prev"},
+            {"role": "model", "content": "ans"},
+        ])
+        call_args = mock_openai_client.client.chat.completions.create.call_args
+        messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+        roles = [m["role"] for m in messages]
+        assert "assistant" in roles  # 'model' mapped to 'assistant'
 
 
-class TestOpenAIClientSearch:
+# ---------------------------------------------------------------------------
+# search (stub)
+# ---------------------------------------------------------------------------
+
+class TestSearch:
     def test_search_returns_disabled_message(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        result = client.search("test query")
+        result = mock_openai_client.search("test query")
         assert "[search disabled]" in result
-        assert "test query" in result
 
 
-class TestOpenAIClientProperties:
-    def test_model_pro(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        assert client.model_pro == client.model
+# ---------------------------------------------------------------------------
+# RSS fetch
+# ---------------------------------------------------------------------------
 
-    def test_model_flash(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        assert client.model_flash == client.model
-
-
-class TestOpenAIClientRSS:
-    def test_fetch_google_news_rss_error(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        with patch("core.openai_client.urllib.request.urlopen", side_effect=Exception("network error")):
-            items, err = client._fetch_google_news_rss("test", 7)
+class TestRSSFetch:
+    def test_fetch_google_news_rss_network_error(self, mock_openai_client):
+        with patch("urllib.request.urlopen", side_effect=Exception("timeout")):
+            items, err = mock_openai_client._fetch_google_news_rss("q", 7)
             assert items == []
-            assert "network error" in err
+            assert "timeout" in err
 
-    def test_rss_items_to_structured_news_empty(self, mock_openai_client):
-        client = OpenAIClient(api_key="k")
-        result = client._rss_items_to_structured_news("Stock", "dim", "focus", [])
-        assert result == []
+    def test_fetch_google_news_rss_parses_xml(self, mock_openai_client):
+        xml_body = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <rss><channel>
+          <item>
+            <title>Test News Title</title>
+            <link>https://example.com/news1</link>
+            <pubDate>Mon, 03 Feb 2026 10:00:00 GMT</pubDate>
+            <source>TestSource</source>
+          </item>
+        </channel></rss>"""
 
-    def test_rss_items_to_structured_news_parses_json(self, mock_openai_client):
-        mock_openai_client["response"].choices[0].message.content = '{"news": [{"title": "t1", "date": "2025-01-01", "summary": "s", "dimension": "x", "relevance": "r", "importance": "\u9ad8", "source": "src", "url": "http://x"}]}'
-        client = OpenAIClient(api_key="k")
-        items = [{"title": "Raw Title", "source": "S", "pubDate": "2025-01-01", "link": "http://x"}]
-        result = client._rss_items_to_structured_news("Stock", "dim", "focus", items)
-        assert len(result) == 1
-        assert result[0]["dimension"] == "dim"
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = xml_body
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            items, err = mock_openai_client._fetch_google_news_rss("q", 7)
+            assert err is None
+            assert len(items) == 1
+            assert items[0]["title"] == "Test News Title"

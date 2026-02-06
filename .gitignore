@@ -58,3 +58,6 @@ config.json
 
 # 上传的文件
 uploads/
+
+# E2E / script outputs
+outputs/
